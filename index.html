@@ -386,7 +386,17 @@ async function submitMsg(text) {
       body: JSON.stringify({ system: buildSystem(), messages: msgs })
     });
     const data = await res.json();
+    if (!res.ok || data.error) {
+      showTyping(false);
+      addBubble('bot', 'Error: ' + (data.error || 'Unknown error'));
+      return;
+    }
     const raw = data.content || '';
+    if (!raw) {
+      showTyping(false);
+      addBubble('bot', 'Error: Empty response. Check your API key in Vercel.');
+      return;
+    }
     let replyText = raw, chips = [];
     const chipMatch = raw.match(/CHIPS:\s*(.+)$/m);
     if (chipMatch) {
