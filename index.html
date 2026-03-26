@@ -1,1 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mays Career Explorer</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --maroon: #500000; --maroon-light: #7a1a1a; --maroon-faint: #f9f0f0;
+      --maroon-mid: #d4a0a0; --cream: #faf7f4;
+      --border: rgba(80,0,0,0.12); --border-strong: rgba(80,0,0,0.25);
+      --radius: 14px; --font: 'Segoe UI', system-ui, sans-serif;
+    }
+    body { background: #f0ebe6; min-height: 100vh; display: flex; align-items: center; justify-content: center; font-family: var(--font); padding: 16px; }
+    #app { width: 100%; max-width: 720px; display: flex; flex-direction: column; height: 90vh; max-height: 720px; background: white; border-radius: var(--radius); box-shadow: 0 4px 32px rgba(80,0,0,0.12); overflow: hidden; position: relative; }
+    #header { background: var(--maroon); color: white; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+    #header-left { display: flex; align-items: center; gap: 12px; }
+    #header-icon { width: 38px; height: 38px; background: rgba(255,255,255,0.18); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; flex-shrink: 0; }
+    #header h1 { font-size: 15px; font-weight: 500; }
+    #header p { font-size: 12px; opacity: 0.7; }
+    #admin-toggle { background: rgba(255,255,255,0.15); border: 0.5px solid rgba(255,255,255,0.3); color: white; border-radius: 8px; padding: 5px 13px; font-size: 12px; cursor: pointer; font-family: var(--font); transition: background 0.15s; }
+    #admin-toggle:hover { background: rgba(255,255,255,0.28); }
+    #track-bar { display: flex; gap: 6px; padding: 11px 16px; background: var(--maroon-faint); border-bottom: 0.5px solid var(--border); overflow-x: auto; flex-shrink: 0; scrollbar-width: none; }
+    #track-bar::-webkit-scrollbar { display: none; }
+    .track-btn { padding: 5px 12px; font-size: 12px; border-radius: 20px; cursor: pointer; border: 0.5px solid var(--border-strong); background: white; color: var(--maroon); white-space: nowrap; transition: all 0.15s; font-family: var(--font); }
+    .track-btn:hover, .track-btn.active { background: var(--maroon); color: white; border-color: var(--maroon); }
+    #messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: var(--cream); scrollbar-width: thin; scrollbar-color: var(--maroon-mid) transparent; }
+    .msg { display: flex; gap: 10px; }
+    .msg.user { flex-direction: row-reverse; }
+    .bubble { padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.6; max-width: 82%; }
+    .msg.bot .bubble { background: white; border: 0.5px solid var(--border); color: #222; border-radius: 4px 14px 14px 14px; }
+    .msg.user .bubble { background: var(--maroon); color: white; border-radius: 14px 4px 14px 14px; }
+    .bot-icon { width: 30px; height: 30px; border-radius: 50%; background: var(--maroon); color: white; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0; margin-top: 2px; }
+    .role-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .chip { padding: 4px 11px; border-radius: 20px; font-size: 12px; cursor: pointer; border: 0.5px solid var(--maroon-mid); background: var(--maroon-faint); color: var(--maroon); transition: all 0.15s; font-family: var(--font); }
+    .chip:hover { background: var(--maroon); color: white; border-color: var(--maroon); }
+    #input-row { display: flex; gap: 8px; padding: 12px 16px; border-top: 0.5px solid var(--border); background: white; flex-shrink: 0; }
+    #user-input { flex: 1; border: 0.5px solid var(--border-strong); border-radius: 10px; padding: 9px 14px; font-size: 14px; font-family: var(--font); outline: none; background: var(--cream); color: #222; }
+    #user-input:focus { border-color: var(--maroon); }
+    #send-btn { background: var(--maroon); color: white; border: none; border-radius: 10px; padding: 0 18px; cursor: pointer; font-size: 18px; transition: opacity 0.15s; }
+    #send-btn:hover { opacity: 0.85; }
 
+    /* Overlay */
+    #overlay { display: none; position: absolute; inset: 0; background: rgba(0,0,0,0.45); border-radius: var(--radius); align-items: center; justify-content: center; z-index: 10; }
+    #overlay.show { display: flex; }
+    .panel { background: white; border-radius: var(--radius); padding: 24px; width: 92%; max-width: 500px; max-height: 88%; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; scrollbar-width: thin; }
+    .panel h2 { font-size: 16px; font-weight: 600; color: var(--maroon); }
+    .panel label { font-size: 13px; color: #666; display: block; margin-bottom: 4px; }
+    .panel input[type=password], .panel input[type=text], .panel textarea {
+      width: 100%; border: 0.5px solid var(--border-strong); border-radius: 8px;
+      padding: 9px 12px; font-size: 14px; font-family: var(--font);
+      outline: none; color: #222; background: var(--cream);
+    }
+    .panel input:focus, .panel textarea:focus { border-color: var(--maroon); }
+    .panel textarea { resize: vertical; min-height: 90px; }
+    .btn-row { display: flex; gap: 8px; justify-content: flex-end; }
+    .btn { padding: 7px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; font-family: var(--font); border: 0.5px solid var(--border-strong); background: white; color: #333; transition: all 0.15s; }
+    .btn.primary { background: var(--maroon); color: white; border-color: var(--maroon); }
+    .btn:hover { opacity: 0.85; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .section-title { font-size: 13px; font-weight: 600; color: var(--maroon); border-bottom: 0.5px solid var(--border); padding-bottom: 6px; margin-top: 4px; }
+    .upload-zone { border: 1.5px dashed var(--maroon-mid); border-radius: 8px; padding: 18px; text-align: center; cursor: pointer; color: #888; font-size: 13px; transition: all 0.15s; }
+    .upload-zone:hover { border-color: var(--maroon); color: var(--maroon); background: var(--maroon-faint); }
+    .url-row { display: flex; gap: 8px; }
+    .url-row input { flex: 1; }
+    .kb-entry { background: var(--maroon-faint); border: 0.5px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 13px; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+    .kb-entry-text { flex: 1; word-break: break-word; color: #333; }
+    .kb-badge { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 10px; margin-left: 6px; }
+    .badge-text { background: #e6f1fb; color: #185fa5; }
+    .badge-pdf  { background: #fcebeb; color: #a32d2d; }
+    .badge-sheet{ background: #eaf3de; color: #3b6d11; }
+    .badge-url  { background: #faeeda; color: #854f0b; }
+    .kb-del { background: none; border: none; cursor: pointer; color: var(--maroon-light); font-size: 18px; flex-shrink: 0; line-height: 1; }
+    .status-msg { font-size: 13px; }
+    .status-msg.ok  { color: #3b6d11; }
+    .status-msg.err { color: #a32d2d; }
+    .status-msg.info{ color: #888; }
+    .tip-box { background: #faeeda; border: 0.5px solid #f0c880; border-radius: 8px; padding: 10px 13px; font-size: 12.5px; color: #633806; line-height: 1.5; }
+    .sheet-preview-wrap { overflow-x: auto; border: 0.5px solid var(--border); border-radius: 8px; max-height: 150px; overflow-y: auto; }
+    .sheet-preview { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .sheet-preview th { background: var(--maroon); color: white; padding: 5px 8px; text-align: left; font-weight: 500; }
+    .sheet-preview td { padding: 4px 8px; border-bottom: 0.5px solid var(--border); color: #333; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <div id="header-left">
+      <div id="header-icon">M</div>
+      <div><h1>Mays Career Explorer</h1><p>Texas A&M Mays Business School</p></div>
+    </div>
+    <button id="admin-toggle" onclick="openAdmin()">Admin</button>
+  </div>
+
+  <div id="track-bar">
+    <button class="track-btn" onclick="quickTrack(this,'Finance & Accounting')">Finance & Accounting</button>
+    <button class="track-btn" onclick="quickTrack(this,'Marketing & Sales')">Marketing & Sales</button>
+    <button class="track-btn" onclick="quickTrack(this,'Management & Leadership')">Management & Leadership</button>
+    <button class="track-btn" onclick="quickTrack(this,'Entrepreneurship')">Entrepreneurship</button>
+    <button class="track-btn" onclick="quickTrack(this,'Supply Chain & Analytics')">Supply Chain & Analytics</button>
+  </div>
+
+  <div id="messages">
+    <div class="msg bot">
+      <div class="bot-icon">M</div>
+      <div class="bubble">Howdy! I'm your Mays Career Explorer. I can help you discover career paths, typical roles, skills needed, and what different business tracks look like after graduation.<br><br>Pick a track above, or ask me anything — like <em>"What jobs can I get with a finance degree?"</em> or <em>"I love data and problem-solving, what fits me?"</em></div>
+    </div>
+    <div class="msg bot" id="typing" style="display:none">
+      <div class="bot-icon">M</div>
+      <div class="bubble" style="color:#999;font-style:italic;font-size:13px">Thinking...</div>
+    </div>
+  </div>
+
+  <div id="input-row">
+    <input id="user-input" type="text" placeholder="Ask about careers, roles, salaries, skills..." />
+    <button id="send-btn" onclick="sendMsg()">↑</button>
+  </div>
+
+  <!-- Overlay -->
+  <div id="overlay">
+    <!-- Login -->
+    <div class="panel" id="login-panel">
+      <h2>Admin login</h2>
+      <div><label>Password</label><input type="password" id="pw-input" placeholder="Enter admin password" /></div>
+      <p class="status-msg err" id="pw-err" style="display:none">Incorrect password.</p>
+      <div class="btn-row">
+        <button class="btn" onclick="closeOverlay()">Cancel</button>
+        <button class="btn primary" onclick="tryLogin()">Login</button>
+      </div>
+    </div>
+
+    <!-- Admin -->
+    <div class="panel" id="admin-panel" style="display:none">
+      <h2>Knowledge base</h2>
+      <p style="font-size:13px;color:#666">Everything added here is injected into the bot's context so it can answer with your custom info.</p>
+
+      <div class="section-title">Add a text note</div>
+      <div><label>Title (optional)</label><input type="text" id="kb-title" placeholder="e.g. Recruiting timeline 2026" /></div>
+      <div><label>Content</label><textarea id="kb-text" placeholder="Paste any info — recruiting dates, partner companies, scholarships, faculty contacts, program details..."></textarea></div>
+      <div class="btn-row"><button class="btn primary" onclick="addKbText()">Add note</button></div>
+      <p class="status-msg ok" id="kb-success" style="display:none">Added successfully.</p>
+
+      <div class="section-title">Add a website</div>
+      <div class="tip-box">
+        To add a webpage: open it in your browser, select all (Ctrl+A / Cmd+A), copy, and paste into the text note box above. Or save the page as a PDF and upload it below.
+      </div>
+
+      <div class="section-title">Upload a document or spreadsheet</div>
+      <p style="font-size:12px;color:#888">Supports PDF, TXT, CSV, XLS, XLSX. Spreadsheets are stored as both a table and a plain-text summary.</p>
+      <div class="upload-zone" onclick="document.getElementById('file-input').click()">
+        Click to upload a file
+        <input type="file" id="file-input" accept=".pdf,.txt,.csv,.xls,.xlsx" style="display:none" onchange="handleFile(this)" />
+      </div>
+      <p class="status-msg" id="upload-status" style="display:none"></p>
+      <div id="sheet-preview-container" style="display:none"></div>
+
+      <div class="section-title" id="entries-title" style="display:none">Current entries</div>
+      <div id="kb-entries"></div>
+      <div class="btn-row" style="margin-top:4px"><button class="btn" onclick="closeOverlay()">Done</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const BASE_SYSTEM = `You are a friendly and knowledgeable career advisor bot for undergraduate business students at Mays Business School at Texas A&M University. Help students explore career pathways across five tracks: Finance & Accounting, Marketing & Sales, Management & Leadership, Entrepreneurship, and Supply Chain & Analytics.
+
+For each career conversation:
+- Describe typical entry-level and mid-career roles
+- Mention relevant skills, certifications, or coursework
+- Note realistic salary ranges (entry-level and experienced)
+- Mention which Mays majors or concentrations align
+- Be encouraging and student-friendly
+- Keep responses concise and scannable
+- When knowledge base data is relevant, reference it specifically
+- When relevant, suggest 2-3 specific job titles at END of response: CHIPS: [Title 1] | [Title 2] | [Title 3]
+- Do not use markdown bullet lists starting with * or -; use short prose
+- Be warm, practical, and grounded in real-world business careers`;
+
+let knowledgeBase = [];
+let msgs = [{ role: 'assistant', content: "Howdy! I'm your Mays Career Explorer." }];
+let isLoggedIn = false;
+
+function buildSystem() {
+  if (!knowledgeBase.length) return BASE_SYSTEM;
+  const kb = knowledgeBase.map((e, i) => {
+    let block = `[Entry ${i+1}${e.title ? ' — ' + e.title : ''} (type: ${e.type})]`;
+    if (e.type === 'spreadsheet') block += `\n\nSummary:\n${e.summary}\n\nFull table (TSV):\n${e.tsv}`;
+    else block += `\n${e.content}`;
+    return block;
+  }).join('\n\n---\n\n');
+  return BASE_SYSTEM + `\n\nADMIN KNOWLEDGE BASE — use this to answer student questions accurately:\n\n${kb}`;
+}
+
+function openAdmin() {
+  document.getElementById('overlay').classList.add('show');
+  isLoggedIn ? showAdminPanel() : showLoginPanel();
+}
+function showLoginPanel() {
+  document.getElementById('login-panel').style.display = 'flex';
+  document.getElementById('admin-panel').style.display = 'none';
+  document.getElementById('pw-err').style.display = 'none';
+  document.getElementById('pw-input').value = '';
+  setTimeout(() => document.getElementById('pw-input').focus(), 50);
+}
+function showAdminPanel() {
+  document.getElementById('login-panel').style.display = 'none';
+  document.getElementById('admin-panel').style.display = 'flex';
+  renderEntries();
+}
+function tryLogin() {
+  if (document.getElementById('pw-input').value === 'rseo2026') {
+    isLoggedIn = true; showAdminPanel();
+  } else {
+    document.getElementById('pw-err').style.display = 'block';
+  }
+}
+document.getElementById('pw-input').addEventListener('keydown', e => { if (e.key === 'Enter') tryLogin(); });
+function closeOverlay() { document.getElementById('overlay').classList.remove('show'); }
+
+function addKbText() {
+  const title = document.getElementById('kb-title').value.trim();
+  const content = document.getElementById('kb-text').value.trim();
+  if (!content) return;
+  knowledgeBase.push({ title, content, type: 'text' });
+  document.getElementById('kb-title').value = '';
+  document.getElementById('kb-text').value = '';
+  const s = document.getElementById('kb-success');
+  s.style.display = 'block';
+  setTimeout(() => s.style.display = 'none', 2500);
+  renderEntries();
+}
+
+async function handleFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const status = document.getElementById('upload-status');
+  const previewContainer = document.getElementById('sheet-preview-container');
+  status.style.display = 'block';
+  status.className = 'status-msg info';
+  status.textContent = 'Reading file...';
+  previewContainer.style.display = 'none';
+  previewContainer.innerHTML = '';
+
+  try {
+    const name = file.name.toLowerCase();
+    const isSheet = name.endsWith('.csv') || name.endsWith('.xlsx') || name.endsWith('.xls');
+    const isPdf = name.endsWith('.pdf');
+
+    if (isSheet) {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const sheetName = wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (!rows.length) throw new Error('Spreadsheet appears empty.');
+      const headers = rows[0].map(String);
+      const dataRows = rows.slice(1).filter(r => r.some(c => String(c).trim()));
+      const tsv = [headers.join('\t'), ...dataRows.slice(0, 200).map(r => r.map(String).join('\t'))].join('\n');
+      const summary = `File: "${file.name}". ${dataRows.length} rows, columns: ${headers.join(', ')}.\n\nFirst rows:\n` +
+        dataRows.slice(0, 5).map(r => headers.map((h, i) => `${h}: ${r[i]}`).join(', ')).join('\n');
+      knowledgeBase.push({ title: file.name, type: 'spreadsheet', summary, tsv });
+      let tableHtml = '<div class="sheet-preview-wrap"><table class="sheet-preview"><thead><tr>';
+      headers.forEach(h => { tableHtml += `<th>${h}</th>`; });
+      tableHtml += '</tr></thead><tbody>';
+      rows.slice(1, 6).forEach(r => {
+        tableHtml += '<tr>';
+        headers.forEach((_, i) => { tableHtml += `<td>${r[i] !== undefined ? r[i] : ''}</td>`; });
+        tableHtml += '</tr>';
+      });
+      tableHtml += '</tbody></table></div>';
+      if (dataRows.length > 5) tableHtml += `<p style="font-size:12px;color:#888;margin-top:4px">${dataRows.length} total rows loaded.</p>`;
+      previewContainer.innerHTML = tableHtml;
+      previewContainer.style.display = 'block';
+      status.className = 'status-msg ok';
+      status.textContent = `"${file.name}" added — ${dataRows.length} rows, ${headers.length} columns.`;
+    } else if (isPdf) {
+      const buf = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      let text = '';
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page = await pdf.getPage(p);
+        const tc = await page.getTextContent();
+        text += tc.items.map(i => i.str).join(' ') + '\n';
+      }
+      text = text.trim();
+      if (!text) throw new Error('No readable text found in PDF.');
+      knowledgeBase.push({ title: file.name, content: text.slice(0, 6000), type: 'pdf' });
+      status.className = 'status-msg ok';
+      status.textContent = `"${file.name}" added to knowledge base.`;
+    } else {
+      const text = (await file.text()).trim();
+      if (!text) throw new Error('File appears empty.');
+      knowledgeBase.push({ title: file.name, content: text.slice(0, 6000), type: 'text' });
+      status.className = 'status-msg ok';
+      status.textContent = `"${file.name}" added to knowledge base.`;
+    }
+    renderEntries();
+  } catch(e) {
+    status.className = 'status-msg err';
+    status.textContent = 'Could not read file: ' + e.message;
+  }
+  input.value = '';
+}
+
+function renderEntries() {
+  const container = document.getElementById('kb-entries');
+  const title = document.getElementById('entries-title');
+  container.innerHTML = '';
+  if (!knowledgeBase.length) { title.style.display = 'none'; return; }
+  title.style.display = 'block';
+  knowledgeBase.forEach((e, i) => {
+    const div = document.createElement('div');
+    div.className = 'kb-entry';
+    const badgeMap = { text: 'badge-text', pdf: 'badge-pdf', spreadsheet: 'badge-sheet', url: 'badge-url' };
+    const preview = e.type === 'spreadsheet' ? (e.summary||'').slice(0,100)+'…' : (e.content||'').slice(0,100)+((e.content||'').length>100?'…':'');
+    div.innerHTML = `<div class="kb-entry-text"><strong style="color:var(--maroon)">${e.title||'Entry '+(i+1)}</strong><span class="kb-badge ${badgeMap[e.type]||'badge-text'}">${e.type}</span><br><span style="color:#888;font-size:12px">${preview}</span></div>`;
+    const del = document.createElement('button');
+    del.className = 'kb-del'; del.textContent = '×'; del.title = 'Remove';
+    del.onclick = () => { knowledgeBase.splice(i, 1); renderEntries(); };
+    div.appendChild(del);
+    container.appendChild(div);
+  });
+}
+
+function quickTrack(btn, track) {
+  document.querySelectorAll('.track-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  submitMsg(`Tell me about career paths in ${track}`);
+}
+function sendMsg() {
+  const inp = document.getElementById('user-input');
+  const text = inp.value.trim();
+  if (!text) return;
+  inp.value = '';
+  submitMsg(text);
+}
+document.getElementById('user-input').addEventListener('keydown', e => { if (e.key === 'Enter') sendMsg(); });
+
+function addBubble(role, html, chips) {
+  const container = document.getElementById('messages');
+  const typing = document.getElementById('typing');
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  if (role === 'bot') {
+    const icon = document.createElement('div');
+    icon.className = 'bot-icon'; icon.textContent = 'M';
+    div.appendChild(icon);
+  }
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.innerHTML = html;
+  if (chips && chips.length) {
+    const row = document.createElement('div');
+    row.className = 'role-chips';
+    chips.forEach(c => {
+      const btn = document.createElement('button');
+      btn.className = 'chip'; btn.textContent = c;
+      btn.onclick = () => submitMsg(`Tell me more about the ${c} role`);
+      row.appendChild(btn);
+    });
+    bubble.appendChild(row);
+  }
+  div.appendChild(bubble);
+  container.insertBefore(div, typing);
+  container.scrollTop = container.scrollHeight;
+}
+
+function showTyping(show) {
+  document.getElementById('typing').style.display = show ? 'flex' : 'none';
+  if (show) document.getElementById('messages').scrollTop = 99999;
+}
+
+async function submitMsg(text) {
+  addBubble('user', text);
+  msgs.push({ role: 'user', content: text });
+  showTyping(true);
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ system: buildSystem(), messages: msgs })
+    });
+    const data = await res.json();
+    const raw = data.content || '';
+    let replyText = raw, chips = [];
+    const chipMatch = raw.match(/CHIPS:\s*(.+)$/m);
+    if (chipMatch) {
+      chips = chipMatch[1].split('|').map(s => s.replace(/[\[\]]/g,'').trim()).filter(Boolean);
+      replyText = raw.replace(/CHIPS:.+$/m,'').trim();
+    }
+    const html = replyText.replace(/\n\n/g,'<br><br>').replace(/\n/g,'<br>');
+    showTyping(false);
+    addBubble('bot', html, chips);
+    msgs.push({ role: 'assistant', content: raw });
+  } catch(e) {
+    showTyping(false);
+    addBubble('bot', 'Something went wrong. Please try again.');
+  }
+}
+</script>
+</body>
+</html>
