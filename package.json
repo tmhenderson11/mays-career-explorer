@@ -1,0 +1,9 @@
+{
+  "name": "mays-career-explorer",
+  "version": "1.0.0",
+  "description": "Mays Business School career exploration chatbot",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  }
+}
